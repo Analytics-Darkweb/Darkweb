@@ -1,0 +1,76 @@
+---
+title: "Animation"
+author: ",,,"
+date: "8/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(nflfastR)
+library(gganimate)
+library(ggimage)
+library(tidyverse)
+
+seasons <- 2010:2019
+pbp <- purrr::map_df(seasons, function(x) {
+  readr::read_csv(
+    glue::glue("https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_{x}.csv.gz")
+  )
+})
+```
+
+
+
+```{r}
+pbp <- 
+  pbp %>%
+  filter(season_type == 'REG', !is.na(posteam) & (rush == 1 | pass == 1), posteam != "", defteam != "")
+
+offense <- 
+  pbp %>%
+  group_by(posteam, season) %>% 
+  summarise(off_epa = mean(epa, na.rm = TRUE)) %>%
+  ungroup()
+
+defense <- 
+  pbp %>%
+  group_by(defteam, season) %>% 
+  summarise(def_epa = mean(epa, na.rm = TRUE)) %>%
+  ungroup()
+
+logos <- teams_colors_logos %>% select(team_abbr, team_logo_espn)
+
+df <-   
+  offense %>%
+  inner_join(defense, by = c("posteam" = "defteam", "season")) %>%
+  inner_join(logos, by = c("posteam" = "team_abbr"))
+
+p <- 
+  ggplot(df, aes(x = off_epa, y = def_epa)) +
+  geom_abline(slope = -1.5, intercept = c(.4, .3, .2, .1, 0, -.1, -.2, -.3), alpha = .2) +
+  geom_hline(aes(yintercept = mean(off_epa)), color = "red", linetype = "dashed") +
+  geom_vline(aes(xintercept = mean(def_epa)), color = "red", linetype = "dashed") +
+  geom_image(aes(image = team_logo_espn), size = 0.05, asp = 16 / 9) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 9 / 16,
+    plot.title = element_text(size = 12, hjust = 0.5, face = "bold")
+  ) +
+  scale_y_reverse() + 
+  transition_states(season, transition_length = 2, state_length = 1) +
+  labs(
+    x = "Offense EPA/play",
+    y = "Defense EPA/play",
+    caption = "Data: @nflfastR",
+    title = "{closest_state} NFL Offensive and Defensive EPA per Play"
+  ) + 
+  enter_fade()+
+  exit_fade()
+
+animate(p, width = 1000, height = 1000)
+
+anim_save("Darkweb/EPA Animation.gif")
+
+```
+
